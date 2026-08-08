@@ -14,11 +14,11 @@
     height: 100vh; 
     max-width: 1200px; 
     margin: 0 auto; 
-    background: #55aaff; /* 天空背景色 */
+    background: #4a90e2; /* 天空天藍色 */
     overflow: hidden; 
   }
   
-  /* 底層：Canvas 偽 3D 道路引擎（會從去背的擋風玻璃透過去） */
+  /* 底層 Canvas 道路 */
   #roadCanvas { 
     position: absolute; 
     top: 0; 
@@ -28,7 +28,7 @@
     z-index: 1; 
   }
 
-  /* 頂層：高質感去背車艙 PNG 圖片 */
+  /* 頂層去背座艙 PNG */
   #cockpitOverlay { 
     position: absolute; 
     bottom: 0; 
@@ -36,40 +36,37 @@
     width: 100%; 
     height: 100%; 
     z-index: 10; 
-    pointer-events: none; /* 讓滑鼠點擊穿透到下層或熱區 */ 
+    pointer-events: none; 
     object-fit: cover; 
   }
 
-  /* 互動熱區：右側方向燈撥桿 */
+  /* 觸控互動熱區 */
   .interactive-zone { 
     position: absolute; 
     pointer-events: auto; 
     cursor: pointer; 
     z-index: 20; 
-    /* 測試時若需看清熱區位置，可將下面這行註解拿掉 */
-    /* background: rgba(255, 0, 0, 0.3); */
   }
   
   #signal-lever-zone { 
-    right: 26%; 
-    bottom: 42%; 
-    width: 70px; 
-    height: 110px; 
+    right: 25%; 
+    bottom: 40%; 
+    width: 80px; 
+    height: 120px; 
     transform: rotate(15deg);
     border-radius: 15px;
   }
 
-  /* 互動熱區：左側雨刷撥桿（錯誤示範區） */
   #wiper-lever-zone { 
     left: 28%; 
-    bottom: 42%; 
-    width: 70px; 
-    height: 110px; 
+    bottom: 40%; 
+    width: 80px; 
+    height: 120px; 
     transform: rotate(-15deg);
     border-radius: 15px;
   }
 
-  /* 狀態提示 HUD */
+  /* 提示 HUD */
   #hud { 
     position: absolute; 
     top: 25px; 
@@ -88,7 +85,6 @@
     box-shadow: 0 4px 15px rgba(0,0,0,0.6);
   }
 
-  /* 任務指引面板 */
   #mission { 
     position: absolute; 
     top: 20px; 
@@ -101,37 +97,27 @@
     font-size: 14px; 
     z-index: 30;
     pointer-events: none;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
   }
 </style>
 </head>
 <body>
 
 <div id="gameContainer">
-  <!-- 任務面板 -->
   <div id="mission">
     <div style="color:#f2c14e; font-weight:bold; margin-bottom:5px;">日本右駕肌肉記憶訓練</div>
     <div>情境：準備右轉進入市區道路。<br>請點擊方向盤右側的**方向燈撥桿**。</div>
   </div>
 
-  <!-- 提示回饋框 -->
   <div id="hud">右方向燈作動中 ⇨</div>
 
-  <!-- 底層：動態 Canvas 道路 (透過透明車窗呈現) -->
   <canvas id="roadCanvas"></canvas>
-
-  <!-- 頂層：去背車艙實景圖 -->
   <img id="cockpitOverlay" src="assets/cockpit_overlay.png" alt="RHD Cockpit">
 
-  <!-- 觸控互動熱區 -->
   <div id="signal-lever-zone" class="interactive-zone" onclick="triggerSignal(true)" title="右方向燈"></div>
   <div id="wiper-lever-zone" class="interactive-zone" onclick="triggerSignal(false)" title="雨刷"></div>
 </div>
 
 <script>
-  // ==========================================
-  // 1. 擋風玻璃透視道路渲染引擎
-  // ==========================================
   const canvas = document.getElementById('roadCanvas');
   const ctx = canvas.getContext('2d');
   
@@ -143,13 +129,12 @@
   resizeCanvas();
 
   let position = 0;
-  let speed = 45; // 行駛速度
-  let roadWidth = 1600;
+  let speed = 45;
+  let roadWidth = 2000;
   let cameraDepth = 0.84;
   let segments = [];
   let trackLength = 5000;
 
-  // 初始化道路段落（模擬日本雙線道與紅邊路緣石）
   for (let n = 0; n < trackLength; n++) {
     segments.push({
       z: n * 200,
@@ -176,10 +161,13 @@
     let width = canvas.width;
     let height = canvas.height;
     
-    // 配合右駕駕駛座偏左的視角
-    let playerX = -0.32; 
+    // 右駕偏左視角修正
+    let playerX = -0.35; 
 
-    for (let n = 0; n < 140; n++) {
+    // 將地平線上移至畫面 36% 處（對齊 Delica 擋風玻璃視線高度）
+    let horizonY = height * 0.36;
+
+    for (let n = 0; n < 160; n++) {
       let segment = segments[(Math.floor(position / 200) + n) % segments.length];
       
       let p1 = { z: segment.z - position };
@@ -190,20 +178,18 @@
       let scale2 = cameraDepth / p2.z;
       
       let x1 = width / 2 + (0 - playerX * roadWidth) * scale1 * width / 2;
-      let y1 = height / 2 + 280 * scale1 * height / 2;
+      let y1 = horizonY + 350 * scale1 * height / 2;
       let w1 = roadWidth * scale1 * width / 2;
 
       let x2 = width / 2 + (0 - playerX * roadWidth) * scale2 * width / 2;
-      let y2 = height / 2 + 280 * scale2 * height / 2;
+      let y2 = horizonY + 350 * scale2 * height / 2;
       let w2 = roadWidth * scale2 * width / 2;
 
       if (y1 <= y2) continue;
 
-      // 繪製背景草地
       ctx.fillStyle = segment.color.grass;
       ctx.fillRect(0, y2, width, y1 - y2);
 
-      // 繪製路緣石與柏油路
       drawPolygon(ctx, x1 - w1 * 1.05, y1, x1 + w1 * 1.05, y1, x2 + w2 * 1.05, y2, x2 - w2 * 1.05, y2, segment.color.rumble);
       drawPolygon(ctx, x1 - w1, y1, x1 + w1, y1, x2 + w2, y2, x2 - w2, y2, segment.color.road);
     }
@@ -214,9 +200,6 @@
   
   renderRoad();
 
-  // ==========================================
-  // 2. 肌肉記憶即時回饋系統
-  // ==========================================
   const hud = document.getElementById('hud');
   let hudTimer = null;
 
@@ -240,4 +223,4 @@
   }
 </script>
 </body>
-</html>
+</html></html>
