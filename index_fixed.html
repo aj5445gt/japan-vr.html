@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>日本右駕 3D 虛擬實境肌肉記憶模擬器 v2</title>
+<script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+<style>
+:root{
+  --bg:#0b1020;--panel:#151d2f;--panel2:#202b42;--line:#3a4965;
+  --yellow:#f2c14e;--green:#36e08a;--red:#e74c5c;--white:#f4f6fb;--muted:#9aa8bf;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;color:var(--white)}
+a-scene{position:fixed!important;inset:0;width:100vw!important;height:100vh!important}
+#ad-top{position:fixed;z-index:20;top:6px;left:50%;transform:translateX(-50%);width:min(728px,92vw);height:58px;background:#666;display:flex;align-items:center;justify-content:center;border:1px dashed #aaa;border-radius:6px;color:#ddd;font-size:11px;letter-spacing:2px;pointer-events:none}
+#hud{position:fixed;z-index:21;top:72px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:none}
+.gauge{min-width:88px;text-align:center;background:rgba(18,27,44,.94);border:1px solid var(--line);border-radius:12px;padding:7px 12px;box-shadow:0 6px 20px #0008}
+.gauge .l{font-size:9px;color:var(--muted);letter-spacing:1.5px}.gauge .v{font-size:21px;font-weight:900;color:var(--yellow)}
+.gauge.ok .v{color:var(--green)}
+#mission{position:fixed;z-index:21;left:16px;bottom:16px;width:min(390px,calc(100vw - 32px));background:rgba(15,23,39,.94);border:1px solid var(--line);border-left:5px solid var(--yellow);border-radius:14px;padding:14px 16px;box-shadow:0 10px 30px #0009}
+#mission .tag{font-size:10px;letter-spacing:3px;color:var(--yellow);font-weight:900}#mission h2{margin:4px 0 7px;font-size:18px}#mission p{margin:0;color:#d2d9e6;font-size:12px;line-height:1.65}#status{margin-top:7px;color:var(--yellow);font-size:12px}
+#lamps{position:fixed;z-index:21;right:16px;bottom:16px;display:flex;flex-direction:column;gap:7px;pointer-events:none}
+.lamp{background:rgba(15,23,39,.92);border:1px solid var(--line);border-radius:18px;padding:7px 11px;font-size:11px;color:var(--muted)}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#39445b;margin-right:7px}.lamp.on .dot{background:var(--green);box-shadow:0 0 9px var(--green)}.lamp.warn .dot{background:var(--red);box-shadow:0 0 9px var(--red)}
+#hint{position:fixed;z-index:20;left:50%;top:50%;transform:translate(-50%,-50%);color:#fff9;text-shadow:0 2px 8px #000;font-size:13px;letter-spacing:1px;pointer-events:none;text-align:center}
+#warning{position:fixed;z-index:100;inset:0;display:none;align-items:center;justify-content:center;background:#d00 22%;pointer-events:none}
+#warning.show{display:flex}.warning-box{background:#b9152d;border:3px solid #fff;border-radius:12px;padding:18px 28px;font-weight:900;font-size:20px;box-shadow:0 0 50px #f00}
+.modal{position:fixed;z-index:110;inset:0;background:#070b14dd;display:flex;align-items:center;justify-content:center;padding:18px}.modal.hidden{display:none}
+.card{width:min(520px,94vw);background:var(--panel);border:1px solid var(--line);border-top:5px solid var(--yellow);border-radius:16px;padding:24px;text-align:center;box-shadow:0 25px 70px #000b}
+.card h1{margin:5px 0 10px;font-size:25px}.card p{color:var(--muted);font-size:13px;line-height:1.7}.btn{border:0;border-radius:9px;padding:11px 22px;background:var(--yellow);color:#211800;font-weight:900;cursor:pointer}.btn:hover{filter:brightness(1.08)}
+#cert-ad{height:72px;background:#666;border:1px dashed #aaa;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#ddd;font-size:11px;margin:14px 0}
+#cert-score{font-size:38px;font-weight:900;color:var(--green)}#cert-rank{font-size:28px;color:var(--yellow);font-weight:900}
+@media(max-width:700px){
+ #ad-top{height:42px;font-size:9px}#hud{top:54px}.gauge{min-width:70px;padding:5px 8px}.gauge .v{font-size:17px}
+ #mission{bottom:8px;left:8px;width:calc(100vw - 16px);padding:10px 12px}.lamp{font-size:9px;padding:5px 8px}
+ #lamps{right:8px;bottom:120px}.card{padding:18px}
+}
+</style>
+</head>
+<body>
+
+<!-- Google AdSense 頂部廣告版位：正式上線時替換為真實 AdSense <ins> -->
+<div id="ad-top">AD PLACEHOLDER・Google AdSense 728×60</div>
+
+<div id="hud">
+  <div class="gauge"><div class="l">關卡 LEVEL</div><div class="v" id="level">1 / 5</div></div>
+  <div class="gauge ok"><div class="l">分數 SCORE</div><div class="v" id="score">0</div></div>
+  <div class="gauge"><div class="l">失誤 MISS</div><div class="v" id="miss">0</div></div>
+</div>
+
+<div id="mission">
+  <div class="tag" id="tag">MISSION 01</div>
+  <h2 id="title">發動引擎</h2>
+  <p id="desc">請點擊右駕駛座的方向盤啟動引擎，再點擊左側排檔桿入檔。</p>
+  <div id="status">狀態：等待操作...</div>
+</div>
+
+<div id="lamps">
+  <div class="lamp" id="lamp-engine"><span class="dot"></span>引擎 ENGINE</div>
+  <div class="lamp" id="lamp-gear"><span class="dot"></span>排檔 GEAR</div>
+  <div class="lamp" id="lamp-signal"><span class="dot"></span>方向燈 SIGNAL</div>
+  <div class="lamp" id="lamp-brake"><span class="dot"></span>煞車 BRAKE</div>
+</div>
+
+<div id="hint">拖曳畫面／滑動螢幕可 360° 環視<br>點擊車內大型操作部件執行任務</div>
+
+<div id="warning"><div class="warning-box" id="warningText">⚠ 操作錯誤</div></div>
+
+<div class="modal" id="intro">
+  <div class="card">
+    <div style="color:var(--yellow);font-size:11px;letter-spacing:3px;font-weight:900">VIRTUAL DRIVING SCHOOL</div>
+    <h1>🇯🇵 日本右駕肌肉記憶模擬器</h1>
+    <p>這一版把駕駛座、方向盤、排檔桿、左右撥桿與煞車全部放大，並把視角移到駕駛座內，不再讓車頂與 A 柱遮住主要操作區。</p>
+    <button class="btn" id="start">開始訓練 ▶</button>
+  </div>
+</div>
+
+<div class="modal hidden" id="certificate">
+  <div class="card">
+    <div style="font-size:42px">🏆</div>
+    <h1>訓練完成</h1>
+    <div id="cert-score">0</div>
+    <div>總分</div>
+    <div style="margin-top:8px">失誤：<b id="cert-miss">0</b>　評級：<b id="cert-rank">S</b></div>
+    <p>你已完成五個日本右駕情境訓練。</p>
+
+    <!-- Google AdSense 證書彈窗廣告版位：正式上線時替換為真實 AdSense <ins> -->
+    <div id="cert-ad">AD PLACEHOLDER・Google AdSense In-Modal</div>
+
+    <button class="btn" id="restart">再訓練一次 ↺</button>
+  </div>
+</div>
+
+<a-scene id="scene" vr-mode-ui="enabled:false" renderer="antialias:true;colorManagement:true" loading-screen="dotsColor:#f2c14e;backgroundColor:#0b1020">
+  <a-sky color="#6f8eaa"></a-sky>
+  <a-entity light="type:ambient;intensity:1.15;color:#dbe7ff"></a-entity>
+  <a-entity light="type:directional;intensity:1.0;color:#fff4dc" position="2 5 4"></a-entity>
+
+  <!-- 道路：左側通行，駕駛車輛位於道路左半 -->
+  <a-plane position="0 0 -75" rotation="-90 0 0" width="10" height="180" color="#292c33"></a-plane>
+  <a-box position="-4.8 .06 -75" width=".25" height=".12" depth="180" color="#eee"></a-box>
+  <a-box position="4.8 .06 -75" width=".25" height=".12" depth="180" color="#eee"></a-box>
+
+  <!-- 中央虛線 -->
+  <a-entity id="roadMarks"></a-entity>
+
+  <!-- 路邊簡易建築 -->
+  <a-box position="-8 2.5 -25" width="6" height="5" depth="7" color="#cdbfae"></a-box>
+  <a-box position="8 3 -40" width="6" height="6" depth="7" color="#aebdca"></a-box>
+  <a-box position="-8 2.5 -58" width="6" height="5" depth="7" color="#d4b49c"></a-box>
+
+  <!-- 關卡三止まれ -->
+  <a-entity id="stopScene" visible="false" position="-2.2 1.25 -15">
+    <a-cylinder radius=".58" height=".08" segments-radial="8" rotation="90 0 0" color="#c8102e"></a-cylinder>
+    <a-text value="止まれ" align="center" width="2.1" color="#fff" position="0 0 .06"></a-text>
+    <a-cylinder radius=".045" height="1.8" color="#777" position="0 -.95 0"></a-cylinder>
+  </a-entity>
+
+  <!-- 關卡四十字路口 -->
+  <a-entity id="intersection" visible="false" position="0 0 -30">
+    <a-plane rotation="-90 0 0" width="20" height="12" color="#292c33"></a-plane>
+    <a-box position="-7 .05 0" width="6" height=".1" depth="4" color="#263f67"></a-box>
+    <a-text value="① 正確：靠左大彎" align="center" width="3.8" color="#36e08a" position="-7 .18 0"></a-text>
+    <a-box position="7 .05 0" width="6" height=".1" depth="4" color="#662b35"></a-box>
+    <a-text value="② 錯誤：內切逆向" align="center" width="3.8" color="#ff6575" position="7 .18 0"></a-text>
+  </a-entity>
+
+  <!-- 駕駛艙：刻意不放厚重車頂/A柱，避免遮擋 -->
+  <a-entity id="cockpit" position="-1.8 0 0">
+    <!-- 儀表板 -->
+    <a-box position="0 1.02 -1.0" width="3.7" height=".55" depth=".55" color="#343a48"></a-box>
+    <a-box position="0 1.30 -.98" width="3.8" height=".08" depth=".6" color="#171a20"></a-box>
+
+    <!-- 右駕方向盤：大型、位於 x=+0.95 -->
+    <a-entity id="steering" class="clickable" position=".95 1.15 -1.45">
+      <a-torus radius=".46" radius-tubular=".075" color="#4f5b73"></a-torus>
+      <a-cylinder radius=".14" height=".09" rotation="90 0 0" color="#20252e"></a-cylinder>
+      <a-box position="0 -.24 0" width=".08" height=".48" depth=".08" color="#66718a"></a-box>
+      <a-box position=".25 .10 0" width=".34" height=".07" depth=".07" rotation="0 0 38" color="#66718a"></a-box>
+      <a-box position="-.25 .10 0" width=".34" height=".07" depth=".07" rotation="0 0 -38" color="#66718a"></a-box>
+      <a-text id="steerLabel" value="方向盤・右駕" align="center" width="2.8" color="#fff" position="0 -.72 0"></a-text>
+    </a-entity>
+
+    <!-- 左側排檔 -->
+    <a-entity id="gear" class="clickable" position="-.72 .80 -1.28">
+      <a-cylinder radius=".055" height=".62" color="#858c9a" position="0 .31 0"></a-cylinder>
+      <a-sphere radius=".13" color="#c8102e" position="0 .63 0"></a-sphere>
+      <a-text value="排檔・左手" align="center" width="2.2" color="#fff" position="0 -.05 0"></a-text>
+    </a-entity>
+
+    <!-- 左撥桿 -->
+    <a-entity id="leftStalk" class="clickable" position=".28 1.18 -1.35" rotation="0 0 -22">
+      <a-cylinder radius=".045" height=".52" color="#252a32"></a-cylinder>
+      <a-sphere radius=".085" color="#697487" position="0 .26 0"></a-sphere>
+      <a-text value="左＝雨刷" align="center" width="1.8" color="#ff8895" position="-.1 -.48 0" rotation="0 0 22"></a-text>
+    </a-entity>
+
+    <!-- 右撥桿 -->
+    <a-entity id="rightStalk" class="clickable" position="1.60 1.18 -1.35" rotation="0 0 22">
+      <a-cylinder radius=".045" height=".52" color="#252a32"></a-cylinder>
+      <a-sphere radius=".085" color="#36e08a" position="0 .26 0"></a-sphere>
+      <a-text value="右＝方向燈" align="center" width="2.0" color="#71f0ab" position=".05 -.48 0" rotation="0 0 -22"></a-text>
+    </a-entity>
+
+    <!-- 煞車 -->
+    <a-entity id="brake" class="clickable" position=".72 .34 -1.62">
+      <a-box width=".28" height=".42" depth=".16" color="#525966"></a-box>
+      <a-text value="煞車" align="center" width="1.4" color="#ff7d8c" position="0 -.38 0"></a-text>
+    </a-entity>
+
+    <!-- 油門 -->
+    <a-box position="1.12 .34 -1.62" width=".22" height=".36" depth=".14" color="#3f444e"></a-box>
+
+    <!-- 簡單座椅 -->
+    <a-box position=".85 .45 .05" width="1.0" height=".12" depth=".75" color="#20242b"></a-box>
+    <a-box position=".85 .88 .32" width="1.0" height=".85" depth=".12" color="#20242b"></a-box>
+
+    <!-- 前擋風玻璃僅用透明面，不遮擋道路 -->
+    <a-plane position="0 1.85 -2.4" width="4.8" height="1.5" color="#9cc4dd" opacity=".10" transparent="true"></a-plane>
+  </a-entity>
+
+  <!-- 相機：在駕駛座中心稍偏右 -->
+  <a-entity id="rig" position="-.85 1.38 .15">
+    <a-entity id="camera"
+      camera="near:.03;far:500;fov:78"
+      look-controls="enabled:true;reverseMouseDrag:false"
+      cursor="rayOrigin:mouse;fuse:false"
+      raycaster="objects:.clickable;far:12">
+    </a-entity>
+  </a-entity>
+</a-scene>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const state = {
+    level:1, score:0, miss:0,
+    engine:false, gear:false, signal:false, brake:false,
+    leftSeen:false, rightSeen:false, tracking:false,
+    baseYaw:0, laneSolved:false, started:false
+  };
+
+  const missions = {
+    1:['MISSION 01','發動引擎','點擊右側大型方向盤啟動引擎，再點擊左側排檔桿入檔。'],
+    2:['MISSION 02','前方右轉・方向燈','右轉前請點擊右側撥桿。若點左側，會誤觸雨刷並扣分。'],
+    3:['MISSION 03','止まれ・左右確認','看到「止まれ」後先踩煞車，再把視角向左、向右各觀察一次。'],
+    4:['MISSION 04','十字路口・右轉','請選擇「① 正確：靠左大彎」。選②會觸發逆向警報。'],
+    5:['MISSION 05','綜合確認','請點擊左側後視鏡完成最後確認。']
+  };
+
+  function hud(){
+    $('level').textContent = state.level+' / 5';
+    $('score').textContent = state.score;
+    $('miss').textContent = state.miss;
+  }
+  function status(t,c='var(--yellow)'){ $('status').textContent='狀態：'+t; $('status').style.color=c; }
+  function lamp(id,m){ const e=$(id); e.classList.remove('on','warn'); if(m)e.classList.add(m); }
+  function add(n){state.score+=n;hud();}
+  function warn(t){
+    state.miss++; hud(); $('warningText').textContent=t; $('warning').classList.add('show');
+    setTimeout(()=> $('warning').classList.remove('show'),1100);
+  }
+  function mission(){
+    const m=missions[state.level]; $('tag').textContent=m[0];$('title').textContent=m[1];$('desc').textContent=m[2];
+    hud();
+    $('stopScene').setAttribute('visible',state.level===3);
+    $('intersection').setAttribute('visible',state.level===4);
+    status('等待操作...');
+  }
+  function advance(){
+    if(state.level===5){finish();return;}
+    state.level++;
+    state.signal=false;state.brake=false;state.leftSeen=false;state.rightSeen=false;state.tracking=false;state.laneSolved=false;
+    mission();
+  }
+
+  $('start').onclick=()=>{
+    $('intro').classList.add('hidden'); state.started=true; mission();
+    $('hint').style.opacity='0';
+  };
+
+  $('restart').onclick=()=>location.reload();
+
+  $('steering').addEventListener('click',()=>{
+    if(!state.started||state.level!==1)return;
+    if(state.engine)return;
+    state.engine=true; lamp('lamp-engine','on'); add(10);
+    $('dash-text')?.setAttribute('value','ENGINE ON');
+    status('引擎已發動！請點擊左側排檔桿入檔。','var(--green)');
+  });
+
+  $('gear').addEventListener('click',()=>{
+    if(!state.started||state.level!==1)return;
+    if(!state.engine){warn('⚠ 請先發動引擎');status('尚未發動引擎，無法排檔。');return;}
+    if(state.gear)return;
+    state.gear=true;lamp('lamp-gear','on');add(10);status('排檔完成，準備前進！','var(--green)');
+    setTimeout(advance,600);
+  });
+
+  $('rightStalk').addEventListener('click',()=>{
+    if(!state.started||state.level!==2)return;
+    state.signal=true;lamp('lamp-signal','on');add(15);status('右方向燈已開啟，準備右轉！','var(--green)');
+    setTimeout(advance,600);
+  });
+
+  $('leftStalk').addEventListener('click',()=>{
+    if(!state.started||state.level!==2)return;
+    lamp('lamp-signal','warn');warn('⚠ 這是雨刷，不是方向燈！');status('誤觸雨刷，請改點右側方向燈。');
+    const w=$('leftStalk');w.setAttribute('animation__wiper','property:rotation;from:0 0 -22;to:0 0 22;dir:alternate;dur:180;loop:4');
+  });
+
+  $('brake').addEventListener('click',()=>{
+    if(!state.started||state.level!==3)return;
+    if(state.brake)return;
+    state.brake=true;lamp('lamp-brake','on');add(10);
+    const cam=$('camera');state.baseYaw=cam.object3D.rotation.y;state.leftSeen=false;state.rightSeen=false;state.tracking=true;
+    status('已煞停。請向左、向右各觀察一次。','var(--green)');
+  });
+
+  AFRAME.registerComponent('look-check',{
+    tick:function(){
+      if(!state.tracking || state.level!==3)return;
+      const yaw=this.el.object3D.rotation.y;
+      let d=yaw-state.baseYaw;
+      while(d>Math.PI)d-=2*Math.PI;
+      while(d<-Math.PI)d+=2*Math.PI;
+      if(d < -0.35) state.leftSeen=true;
+      if(d > 0.35) state.rightSeen=true;
+      if(state.leftSeen && state.rightSeen){
+        state.tracking=false;add(20);status('左右路況確認完成，安全通過！','var(--green)');
+        setTimeout(advance,650);
+      }
+    }
+  });
+  $('camera').setAttribute('look-check','');
+
+  function makeZone(id,x,text,color,correct){
+    const z=document.createElement('a-entity');
+    z.id=id;z.classList.add('clickable');z.setAttribute('visible','false');z.setAttribute('position',`${x} .25 -30`);
+    z.innerHTML=`<a-box width="6" height=".45" depth="5" color="${color}" opacity=".92"></a-box><a-text value="${text}" align="center" width="4.5" color="#fff" position="0 .55 0"></a-text>`;
+    $('scene').appendChild(z);
+    z.addEventListener('click',()=>{
+      if(!state.started||state.level!==4||state.laneSolved)return;
+      if(correct){state.laneSolved=true;add(20);status('正確！靠左大彎，避免切入對向車道。','var(--green)');$('intersection').setAttribute('visible',false);setTimeout(advance,650);}
+      else{warn('⚠ 逆向警報！請選①靠左大彎。');status('內切小彎會切入對向車道，請重新選擇。');}
+    });
+  }
+  makeZone('zoneCorrect',-7,'① 正確：靠左大彎','#287b52',true);
+  makeZone('zoneWrong',7,'② 錯誤：內切逆向','#8c2d3b',false);
+
+  const mirror=document.createElement('a-entity');
+  mirror.id='mirror';mirror.classList.add('clickable');mirror.setAttribute('position','-1.35 1.55 -.85');
+  mirror.innerHTML='<a-box width=".65" height=".32" depth=".08" color="#171b22"></a-box><a-plane width=".52" height=".21" position="0 0 .045" color="#7898b5"></a-plane><a-text value="後視鏡" align="center" width="1.6" color="#fff" position="0 -.3 0"></a-text>';
+  $('cockpit').appendChild(mirror);
+  mirror.addEventListener('click',()=>{
+    if(!state.started||state.level!==5)return;
+    add(15);status('後視鏡確認完成，安全匯入車流！','var(--green)');setTimeout(finish,650);
+  });
+
+  function finish(){
+    $('cert-score').textContent=state.score;
+    $('cert-miss').textContent=state.miss;
+    $('cert-rank').textContent=state.miss===0?'S':state.miss<=1?'A':state.miss<=3?'B':'C';
+    $('certificate').classList.remove('hidden');
+  }
+
+  // 道路中央虛線：週期移動，提供「車輛前進」視覺感
+  for(let i=0;i<12;i++){
+    const m=document.createElement('a-box');
+    m.setAttribute('position',`0 .055 ${-6-i*12}`);
+    m.setAttribute('width','.10');m.setAttribute('height','.03');m.setAttribute('depth','5');m.setAttribute('color','#fff');
+    m.setAttribute('animation',`property:position;to:0 .055 6;dur:4200;delay:${i*350};loop:true;easing:linear`);
+    $('roadMarks').appendChild(m);
+  }
+
+  hud();
+  lamp('lamp-engine');lamp('lamp-gear');lamp('lamp-signal');lamp('lamp-brake');
+})();
+</script>
+</body>
+</html>
