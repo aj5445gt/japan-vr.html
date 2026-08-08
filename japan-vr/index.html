@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>日本右駕肌肉記憶模擬器</title>
+<style>
+  * { box-sizing: border-box; }
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
+  
+  #gameContainer { 
+    position: relative; 
+    width: 100%; 
+    height: 100vh; 
+    max-width: 1200px; 
+    margin: 0 auto; 
+    background: #55aaff; /* 天空背景色 */
+    overflow: hidden; 
+  }
+  
+  /* 底層：Canvas 偽 3D 道路引擎（會從去背的擋風玻璃透過去） */
+  #roadCanvas { 
+    position: absolute; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    z-index: 1; 
+  }
+
+  /* 頂層：高質感去背車艙 PNG 圖片 */
+  #cockpitOverlay { 
+    position: absolute; 
+    bottom: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    z-index: 10; 
+    pointer-events: none; /* 讓滑鼠點擊穿透到下層或熱區 */ 
+    object-fit: cover; 
+  }
+
+  /* 互動熱區：右側方向燈撥桿 */
+  .interactive-zone { 
+    position: absolute; 
+    pointer-events: auto; 
+    cursor: pointer; 
+    z-index: 20; 
+    /* 測試時若需看清熱區位置，可將下面這行註解拿掉 */
+    /* background: rgba(255, 0, 0, 0.3); */
+  }
+  
+  #signal-lever-zone { 
+    right: 26%; 
+    bottom: 42%; 
+    width: 70px; 
+    height: 110px; 
+    transform: rotate(15deg);
+    border-radius: 15px;
+  }
+
+  /* 互動熱區：左側雨刷撥桿（錯誤示範區） */
+  #wiper-lever-zone { 
+    left: 28%; 
+    bottom: 42%; 
+    width: 70px; 
+    height: 110px; 
+    transform: rotate(-15deg);
+    border-radius: 15px;
+  }
+
+  /* 狀態提示 HUD */
+  #hud { 
+    position: absolute; 
+    top: 25px; 
+    left: 50%; 
+    transform: translateX(-50%); 
+    background: rgba(0, 0, 0, 0.85); 
+    color: #fff; 
+    padding: 12px 24px; 
+    border-radius: 12px; 
+    font-size: 18px; 
+    font-weight: bold; 
+    text-align: center; 
+    border: 2px solid #4ecdc4; 
+    z-index: 30;
+    display: none;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+  }
+
+  /* 任務指引面板 */
+  #mission { 
+    position: absolute; 
+    top: 20px; 
+    left: 20px; 
+    background: rgba(15, 25, 40, 0.9); 
+    color: #fff; 
+    padding: 15px; 
+    border-left: 5px solid #f2c14e; 
+    border-radius: 5px; 
+    font-size: 14px; 
+    z-index: 30;
+    pointer-events: none;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+  }
+</style>
+</head>
+<body>
+
+<div id="gameContainer">
+  <!-- 任務面板 -->
+  <div id="mission">
+    <div style="color:#f2c14e; font-weight:bold; margin-bottom:5px;">日本右駕肌肉記憶訓練</div>
+    <div>情境：準備右轉進入市區道路。<br>請點擊方向盤右側的**方向燈撥桿**。</div>
+  </div>
+
+  <!-- 提示回饋框 -->
+  <div id="hud">右方向燈作動中 ⇨</div>
+
+  <!-- 底層：動態 Canvas 道路 (透過透明車窗呈現) -->
+  <canvas id="roadCanvas"></canvas>
+
+  <!-- 頂層：去背車艙實景圖 -->
+  <img id="cockpitOverlay" src="assets/cockpit_overlay.png" alt="RHD Cockpit">
+
+  <!-- 觸控互動熱區 -->
+  <div id="signal-lever-zone" class="interactive-zone" onclick="triggerSignal(true)" title="右方向燈"></div>
+  <div id="wiper-lever-zone" class="interactive-zone" onclick="triggerSignal(false)" title="雨刷"></div>
+</div>
+
+<script>
+  // ==========================================
+  // 1. 擋風玻璃透視道路渲染引擎
+  // ==========================================
+  const canvas = document.getElementById('roadCanvas');
+  const ctx = canvas.getContext('2d');
+  
+  function resizeCanvas() {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  let position = 0;
+  let speed = 45; // 行駛速度
+  let roadWidth = 1600;
+  let cameraDepth = 0.84;
+  let segments = [];
+  let trackLength = 5000;
+
+  // 初始化道路段落（模擬日本雙線道與紅邊路緣石）
+  for (let n = 0; n < trackLength; n++) {
+    segments.push({
+      z: n * 200,
+      color: Math.floor(n / 4) % 2 ? 
+             { road: '#333333', grass: '#285e35', rumble: '#ffffff' } : 
+             { road: '#3a3a3a', grass: '#204b2a', rumble: '#d92b2b' }
+    });
+  }
+
+  function drawPolygon(ctx, x1, y1, x2, y2, x3, y3, x4, y4, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x3, y3);
+    ctx.lineTo(x4, y4);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function renderRoad() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    let width = canvas.width;
+    let height = canvas.height;
+    
+    // 配合右駕駕駛座偏左的視角
+    let playerX = -0.32; 
+
+    for (let n = 0; n < 140; n++) {
+      let segment = segments[(Math.floor(position / 200) + n) % segments.length];
+      
+      let p1 = { z: segment.z - position };
+      let p2 = { z: segment.z + 200 - position };
+      if (p1.z <= 0) continue;
+      
+      let scale1 = cameraDepth / p1.z;
+      let scale2 = cameraDepth / p2.z;
+      
+      let x1 = width / 2 + (0 - playerX * roadWidth) * scale1 * width / 2;
+      let y1 = height / 2 + 280 * scale1 * height / 2;
+      let w1 = roadWidth * scale1 * width / 2;
+
+      let x2 = width / 2 + (0 - playerX * roadWidth) * scale2 * width / 2;
+      let y2 = height / 2 + 280 * scale2 * height / 2;
+      let w2 = roadWidth * scale2 * width / 2;
+
+      if (y1 <= y2) continue;
+
+      // 繪製背景草地
+      ctx.fillStyle = segment.color.grass;
+      ctx.fillRect(0, y2, width, y1 - y2);
+
+      // 繪製路緣石與柏油路
+      drawPolygon(ctx, x1 - w1 * 1.05, y1, x1 + w1 * 1.05, y1, x2 + w2 * 1.05, y2, x2 - w2 * 1.05, y2, segment.color.rumble);
+      drawPolygon(ctx, x1 - w1, y1, x1 + w1, y1, x2 + w2, y2, x2 - w2, y2, segment.color.road);
+    }
+    
+    position += speed;
+    requestAnimationFrame(renderRoad);
+  }
+  
+  renderRoad();
+
+  // ==========================================
+  // 2. 肌肉記憶即時回饋系統
+  // ==========================================
+  const hud = document.getElementById('hud');
+  let hudTimer = null;
+
+  function triggerSignal(isRight) {
+    hud.style.display = 'block';
+    clearTimeout(hudTimer);
+
+    if (isRight) {
+      hud.innerHTML = '✅ 正確：右方向燈作動中 ⇨（日本右駕標準動作）';
+      hud.style.borderColor = '#4ecdc4';
+      hud.style.color = '#4ecdc4';
+    } else {
+      hud.innerHTML = '❌ 錯誤：誤觸雨刷！(注意：這是台灣左駕的習慣反射)';
+      hud.style.borderColor = '#ff6b6b';
+      hud.style.color = '#ff6b6b';
+    }
+
+    hudTimer = setTimeout(() => {
+      hud.style.display = 'none';
+    }, 3500);
+  }
+</script>
+</body>
+</html>
